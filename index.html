@@ -16,10 +16,10 @@
         width: 250px;
         display: flex;
         flex-direction: column;
-        gap: 15px; /* Space between the two cards */
+        gap: 15px;
     }
 
-    /* THE CARD STYLE (Applied to both Search and Add boxes) */
+    /* THE CARD STYLE */
     .panel {
         background: white; 
         padding: 15px; 
@@ -27,9 +27,30 @@
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
-    input, select { display: block; margin-bottom: 10px; padding: 5px; width: 100%; box-sizing: border-box;}
+    input, select { display: block; margin-bottom: 10px; padding: 8px; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
     
-    .search-container { position: relative; margin-bottom: 0; }
+    /* --- NEW: Search Container with Icon --- */
+    .search-container { 
+        position: relative; 
+        margin-bottom: 0; 
+    }
+
+    /* Padding-right ensures text doesn't hit the icon */
+    #searchInput {
+        padding-right: 35px; 
+    }
+
+    /* The Magnifying Glass Icon */
+    .search-icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-60%); /* Center vertically */
+        width: 18px;
+        height: 18px;
+        fill: #888;
+        pointer-events: none; /* Clicks pass through to the input */
+    }
 
     /* Suggestions Dropdown */
     .suggestions-list {
@@ -50,7 +71,6 @@
     /* Buttons */
     button { cursor: pointer; border-radius: 4px; font-weight: bold; border: none; padding: 8px 15px; width: 100%; }
     
-    /* Add Button needs margin bottom only if inside the list, but here it's last */
     button.add-btn { background: #24b47e; color: white; margin-top: 5px;}
     button.add-btn:hover { background: #1f9b6c; }
     
@@ -69,6 +89,11 @@
     <div class="panel">
         <div class="search-container">
             <input type="text" id="searchInput" placeholder="Search Map (e.g. Tower)" autocomplete="off" />
+            
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+
             <div id="suggestions" class="suggestions-list"></div>
         </div>
         <button class="search-btn" onclick="searchPoints()">Search</button>
