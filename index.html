@@ -24,7 +24,7 @@
     .suggestions-list {
         position: absolute; top: 100%; left: 0; width: 100%;
         background: white; border: 1px solid #ccc; border-top: none;
-        max-height: 200px; /* Made slightly taller */
+        max-height: 200px;
         overflow-y: auto; z-index: 1001;
         display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
@@ -32,7 +32,7 @@
     .suggestion-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 0.9em; }
     .suggestion-item:hover { background-color: #f0f0f0; }
 
-    /* --- NEW: Text Colors for Search --- */
+    /* Text Colors */
     .text-black { color: black; font-weight: bold; }
     .text-grey { color: #888; font-style: italic; }
 
@@ -88,7 +88,6 @@
 
     // YOUR RENDER URL
     const API_URL = 'https://searchable-globe.onrender.com/places'; 
-    // NOMINATIM URL (External Search)
     const EXTERNAL_API_URL = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=';
 
     function getIcon(color) {
@@ -135,79 +134,80 @@
         });
     };
 
-    // --- UPDATED: SEARCH LOGIC ---
     function handleTyping() {
         const query = document.getElementById('searchInput').value;
         const suggestionsBox = document.getElementById('suggestions');
         clearTimeout(debounceTimer);
 
-        if (query.length < 3) { // Wait for 3 chars to avoid spamming external API
+        if (query.length < 3) {
             suggestionsBox.style.display = 'none';
             return;
         }
 
         debounceTimer = setTimeout(async () => {
             try {
-                // 1. Request INTERNAL DB (Your Python Backend)
                 const internalPromise = fetch(`${API_URL}?search=${encodeURIComponent(query)}`)
                     .then(res => res.json());
 
-                // 2. Request EXTERNAL DB (OpenStreetMap)
                 const externalPromise = fetch(`${EXTERNAL_API_URL}${encodeURIComponent(query)}`)
                     .then(res => res.json());
 
-                // Wait for BOTH to finish
                 const [internalData, externalData] = await Promise.all([internalPromise, externalPromise]);
 
                 suggestionsBox.innerHTML = '';
                 let hasResults = false;
 
-                // A. Process INTERNAL Results (Black)
+                // A. INTERNAL Results (Black)
                 if (internalData.length > 0) {
                     hasResults = true;
                     internalData.slice(0, 3).forEach(place => {
                         const div = document.createElement('div');
-                        div.className = 'suggestion-item text-black'; // Black Text
-                        div.textContent = place.name; // Display Name
+                        div.className = 'suggestion-item text-black';
+                        
+                        // --- UPDATED: Show Coords (2 decimals) ---
+                        // Ensure it is a number before fixing decimals
+                        const lat = parseFloat(place.lat).toFixed(2);
+                        const lng = parseFloat(place.lng).toFixed(2);
+                        div.textContent = `${place.name} (${lat}, ${lng})`;
                         
                         div.onclick = () => {
-                            // On Click: Fill inputs & Search map
                             document.getElementById('searchInput').value = place.name;
                             document.getElementById('placeName').value = place.name;
                             document.getElementById('lat').value = place.lat;
                             document.getElementById('lng').value = place.lng;
                             
                             suggestionsBox.style.display = 'none';
-                            searchPoints(); // Filter map
+                            searchPoints(); 
                         };
                         suggestionsBox.appendChild(div);
                     });
                 }
 
-                // B. Process EXTERNAL Results (Grey)
+                // B. EXTERNAL Results (Grey)
                 if (externalData.length > 0) {
                     hasResults = true;
                     externalData.slice(0, 5).forEach(place => {
                         const div = document.createElement('div');
-                        div.className = 'suggestion-item text-grey'; // Grey Text
-                        div.textContent = place.display_name; // External name is usually long
+                        div.className = 'suggestion-item text-grey';
+                        
+                        // --- UPDATED: Show Coords (2 decimals) ---
+                        const lat = parseFloat(place.lat).toFixed(2);
+                        const lng = parseFloat(place.lon).toFixed(2);
+                        
+                        // Use display_name but append coords
+                        div.textContent = `${place.display_name} (${lat}, ${lng})`;
                         
                         div.onclick = () => {
-                            // On Click: Fill inputs ONLY (Do not filter map yet, it's not in DB)
-                            // Parse lat/lng from string to float
-                            const lat = parseFloat(place.lat).toFixed(6);
-                            const lng = parseFloat(place.lon).toFixed(6);
+                            const exactLat = parseFloat(place.lat).toFixed(6);
+                            const exactLng = parseFloat(place.lon).toFixed(6);
                             
-                            // Auto-fill the "Add Place" form
-                            document.getElementById('searchInput').value = place.display_name.split(",")[0]; // Short name for search box
-                            document.getElementById('placeName').value = place.display_name.split(",")[0]; // Short name for Add box
-                            document.getElementById('lat').value = lat;
-                            document.getElementById('lng').value = lng;
+                            document.getElementById('searchInput').value = place.display_name.split(",")[0]; 
+                            document.getElementById('placeName').value = place.display_name.split(",")[0]; 
+                            document.getElementById('lat').value = exactLat;
+                            document.getElementById('lng').value = exactLng;
                             
                             suggestionsBox.style.display = 'none';
-                            
-                            // Optional: Fly map to this new location so user can see it
-                            map.flyTo([lat, lng], 10);
+                            map.flyTo([exactLat, exactLng], 10);
                         };
                         suggestionsBox.appendChild(div);
                     });
@@ -218,7 +218,7 @@
             } catch (err) {
                 console.error("Autofill error:", err);
             }
-        }, 400); // Slightly longer delay to be nice to the external API
+        }, 400);
     }
 
     async function loadPoints(searchTerm = '') {
