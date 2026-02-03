@@ -7,18 +7,29 @@
     body { margin: 0; padding: 0; font-family: sans-serif; }
     #map { height: 100vh; width: 100%; background-color: #aad3df; z-index: 1; }
     
-    .controls {
+    /* WRAPPER for the left-side controls */
+    .left-sidebar {
         position: absolute; 
         top: 20px; 
         left: 20px;
         z-index: 9999;
-        background: white; padding: 15px; border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        max-width: 250px;
+        width: 250px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px; /* Space between the two cards */
     }
+
+    /* THE CARD STYLE (Applied to both Search and Add boxes) */
+    .panel {
+        background: white; 
+        padding: 15px; 
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
     input, select { display: block; margin-bottom: 10px; padding: 5px; width: 100%; box-sizing: border-box;}
     
-    .search-container { position: relative; margin-bottom: 10px; }
+    .search-container { position: relative; margin-bottom: 0; }
 
     /* Suggestions Dropdown */
     .suggestions-list {
@@ -37,44 +48,54 @@
     .text-grey { color: #888; font-style: italic; }
 
     /* Buttons */
-    button { cursor: pointer; border-radius: 4px; font-weight: bold; border: none; padding: 8px 15px; width: 100%; margin-bottom: 5px; }
-    button.add-btn { background: #24b47e; color: white; }
+    button { cursor: pointer; border-radius: 4px; font-weight: bold; border: none; padding: 8px 15px; width: 100%; }
+    
+    /* Add Button needs margin bottom only if inside the list, but here it's last */
+    button.add-btn { background: #24b47e; color: white; margin-top: 5px;}
     button.add-btn:hover { background: #1f9b6c; }
-    button.search-btn { background: #3388ff; color: white; }
+    
+    button.search-btn { background: #3388ff; color: white; margin-top: 5px;}
     button.search-btn:hover { background: #2266cc; }
+    
     button.delete-btn { background: #ff4d4d; color: white; font-size: 0.8em; margin-top: 8px; width: auto; }
+    
+    h3 { margin-top: 0; margin-bottom: 10px; font-size: 1.1em; }
   </style>
 </head>
 <body>
 
-  <div class="controls">
-    <h3>Search Map</h3>
-    <div class="search-container">
-        <input type="text" id="searchInput" placeholder="Search (e.g. Tower)" autocomplete="off" />
-        <div id="suggestions" class="suggestions-list"></div>
+  <div class="left-sidebar">
+    
+    <div class="panel">
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search Map (e.g. Tower)" autocomplete="off" />
+            <div id="suggestions" class="suggestions-list"></div>
+        </div>
+        <button class="search-btn" onclick="searchPoints()">Search</button>
     </div>
-    <button class="search-btn" onclick="searchPoints()">Search Locations</button>
-    <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
 
-    <h3>Add Place</h3>
-    <div style="font-size: 0.8em; color: #666; margin-bottom: 5px; font-style: italic;">
-      (Click map to auto-fill)
+    <div class="panel">
+        <h3>Add New Location</h3>
+        <div style="font-size: 0.8em; color: #666; margin-bottom: 10px; font-style: italic;">
+          (Click map to auto-fill)
+        </div>
+        <input type="text" id="placeName" placeholder="Place Name" />
+        <input type="number" id="lat" placeholder="Latitude" step="any" />
+        <input type="number" id="lng" placeholder="Longitude" step="any" />
+        
+        <label style="font-size:0.9em; color:#666;">Marker Color:</label>
+        <select id="color">
+            <option value="blue">Blue</option>
+            <option value="red">Red</option>
+            <option value="green">Green</option>
+            <option value="orange">Orange</option>
+            <option value="violet">Purple</option>
+            <option value="black">Black</option>
+        </select>
+        
+        <button class="add-btn" onclick="addPoint()">Add Location</button>
     </div>
-    <input type="text" id="placeName" placeholder="Place Name" />
-    <input type="number" id="lat" placeholder="Latitude" step="any" />
-    <input type="number" id="lng" placeholder="Longitude" step="any" />
-    
-    <label style="font-size:0.9em; color:#666;">Marker Color:</label>
-    <select id="color">
-        <option value="blue">Blue</option>
-        <option value="red">Red</option>
-        <option value="green">Green</option>
-        <option value="orange">Orange</option>
-        <option value="violet">Purple</option>
-        <option value="black">Black</option>
-    </select>
-    
-    <button class="add-btn" onclick="addPoint()">Add Location</button>
+
   </div>
 
   <div id="map"></div>
@@ -163,9 +184,6 @@
                     internalData.slice(0, 3).forEach(place => {
                         const div = document.createElement('div');
                         div.className = 'suggestion-item text-black';
-                        
-                        // --- UPDATED: Show Coords (2 decimals) ---
-                        // Ensure it is a number before fixing decimals
                         const lat = parseFloat(place.lat).toFixed(2);
                         const lng = parseFloat(place.lng).toFixed(2);
                         div.textContent = `${place.name} (${lat}, ${lng})`;
@@ -190,11 +208,9 @@
                         const div = document.createElement('div');
                         div.className = 'suggestion-item text-grey';
                         
-                        // --- UPDATED: Show Coords (2 decimals) ---
                         const lat = parseFloat(place.lat).toFixed(2);
                         const lng = parseFloat(place.lon).toFixed(2);
                         
-                        // Use display_name but append coords
                         div.textContent = `${place.display_name} (${lat}, ${lng})`;
                         
                         div.onclick = () => {
