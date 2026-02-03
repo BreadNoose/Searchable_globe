@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My Full-Stack Map</title>
+  <title>Project Demo</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { margin: 0; padding: 0; font-family: sans-serif; }
@@ -17,6 +17,8 @@
         display: flex;
         flex-direction: column;
         gap: 15px;
+        max-height: 95vh;
+        overflow-y: auto;
     }
 
     /* THE CARD STYLE */
@@ -27,7 +29,10 @@
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
-    input, select { display: block; margin-bottom: 10px; padding: 8px; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="text"], input[type="number"], select { 
+        display: block; margin-bottom: 10px; padding: 8px; width: 100%; 
+        box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; 
+    }
     
     .search-container { position: relative; margin-bottom: 0; }
     #searchInput { padding-right: 35px; }
@@ -46,22 +51,34 @@
         display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
-    /* --- UPDATED: Flexbox for Icon Alignment --- */
     .suggestion-item { 
-        padding: 8px; 
-        cursor: pointer; 
-        border-bottom: 1px solid #eee; 
-        font-size: 0.9em;
-        display: flex;              /* NEW: Aligns items in a row */
-        justify-content: space-between; /* NEW: Pushes text left, icon right */
-        align-items: center;        /* NEW: Centers vertically */
+        padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 0.9em;
+        display: flex; justify-content: space-between; align-items: center; 
     }
     .suggestion-item:hover { background-color: #f0f0f0; }
 
-    /* --- NEW: Dropdown Marker Icon --- */
-    .dropdown-icon {
-        height: 20px; /* Small size for the list */
-        margin-left: 10px;
+    .dropdown-icon { height: 20px; margin-left: 10px; }
+
+    /* Filter Section Styles */
+    .filter-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    
+    .filter-item {
+        display: flex;
+        align-items: center;
+        font-size: 0.9em;
+        cursor: pointer;
+    }
+    
+    .filter-item input { margin-right: 6px; cursor: pointer; }
+    
+    .color-dot {
+        width: 10px; height: 10px; border-radius: 50%;
+        display: inline-block; margin-right: 6px;
+        border: 1px solid rgba(0,0,0,0.1);
     }
 
     /* Text Colors */
@@ -121,6 +138,36 @@
         <button class="add-btn" onclick="addPoint()">Add Location</button>
     </div>
 
+    <div class="panel">
+        <h3>Filter Visibility</h3>
+        <div class="filter-grid">
+            <label class="filter-item">
+                <input type="checkbox" value="blue" checked onchange="toggleFilter(this)">
+                <span class="color-dot" style="background: #2A81CB;"></span> Blue
+            </label>
+            <label class="filter-item">
+                <input type="checkbox" value="red" checked onchange="toggleFilter(this)">
+                <span class="color-dot" style="background: #CB2B3E;"></span> Red
+            </label>
+            <label class="filter-item">
+                <input type="checkbox" value="green" checked onchange="toggleFilter(this)">
+                <span class="color-dot" style="background: #2AAD27;"></span> Green
+            </label>
+            <label class="filter-item">
+                <input type="checkbox" value="orange" checked onchange="toggleFilter(this)">
+                <span class="color-dot" style="background: #CB8427;"></span> Orange
+            </label>
+            <label class="filter-item">
+                <input type="checkbox" value="violet" checked onchange="toggleFilter(this)">
+                <span class="color-dot" style="background: #9C2BCB;"></span> Purple
+            </label>
+            <label class="filter-item">
+                <input type="checkbox" value="black" checked onchange="toggleFilter(this)">
+                <span class="color-dot" style="background: #3D3D3D;"></span> Black
+            </label>
+        </div>
+    </div>
+
   </div>
 
   <div id="map"></div>
@@ -131,8 +178,10 @@
     let map;
     let markersLayer;
     let debounceTimer;
+    
+    let currentPlaceData = []; 
+    let activeFilters = new Set(['blue', 'red', 'green', 'orange', 'violet', 'black']);
 
-    // YOUR RENDER URL
     const API_URL = 'https://searchable-globe.onrender.com/places'; 
     const EXTERNAL_API_URL = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=';
 
@@ -180,6 +229,67 @@
         });
     };
 
+    window.toggleFilter = function(checkbox) {
+        const color = checkbox.value;
+        if (checkbox.checked) {
+            activeFilters.add(color);
+        } else {
+            activeFilters.delete(color);
+        }
+        renderMarkers();
+    }
+
+    function renderMarkers() {
+        markersLayer.clearLayers();
+        
+        currentPlaceData.forEach(place => {
+            const markerColor = place.color || 'blue';
+            
+            if (activeFilters.has(markerColor)) {
+                const popupContent = `
+                    <div style="text-align:center">
+                        <b>${place.name}</b><br>
+                        <span style="font-size: 0.85em; color: #555;">
+                            (${place.lat.toFixed(4)}, ${place.lng.toFixed(4)})
+                        </span><br>
+                        <button class="delete-btn" onclick="deletePoint(${place.id})">Delete</button>
+                    </div>
+                `;
+                L.marker([place.lat, place.lng], { icon: getIcon(markerColor) })
+                  .addTo(markersLayer)
+                  .bindPopup(popupContent);
+            }
+        });
+    }
+
+    async function loadPoints(searchTerm = '') {
+      try {
+        let url = API_URL;
+        if (searchTerm) {
+            url += `?search=${encodeURIComponent(searchTerm)}`;
+        }
+
+        const response = await fetch(url);
+        currentPlaceData = await response.json(); 
+        
+        renderMarkers();
+
+        if (searchTerm && currentPlaceData.length > 0) {
+            const first = currentPlaceData[0];
+            if (activeFilters.has(first.color || 'blue')) {
+                map.flyTo([first.lat, first.lng], 10);
+            }
+        }
+      } catch (err) {
+        console.error("Error fetching from Python:", err);
+      }
+    }
+
+    function searchPoints() {
+        const query = document.getElementById('searchInput').value;
+        loadPoints(query);
+    }
+
     function handleTyping() {
         const query = document.getElementById('searchInput').value;
         const suggestionsBox = document.getElementById('suggestions');
@@ -192,41 +302,30 @@
 
         debounceTimer = setTimeout(async () => {
             try {
-                // 1. Search Internal (Name OR Color)
-                const internalPromise = fetch(`${API_URL}?search=${encodeURIComponent(query)}`)
-                    .then(res => res.json());
-
-                // 2. Search External (Name only)
-                const externalPromise = fetch(`${EXTERNAL_API_URL}${encodeURIComponent(query)}`)
-                    .then(res => res.json());
+                const internalPromise = fetch(`${API_URL}?search=${encodeURIComponent(query)}`).then(res => res.json());
+                const externalPromise = fetch(`${EXTERNAL_API_URL}${encodeURIComponent(query)}`).then(res => res.json());
 
                 const [internalData, externalData] = await Promise.all([internalPromise, externalPromise]);
 
                 suggestionsBox.innerHTML = '';
                 let hasResults = false;
 
-                // A. INTERNAL Results (Black Text + Icon)
                 if (internalData.length > 0) {
                     hasResults = true;
-                    // Show more results if searching by color, otherwise limit to 3
-                    const limit = 5; 
-                    internalData.slice(0, limit).forEach(place => {
+                    // Limit search results to 5
+                    internalData.slice(0, 5).forEach(place => {
                         const div = document.createElement('div');
                         div.className = 'suggestion-item text-black';
                         
                         const lat = parseFloat(place.lat).toFixed(2);
                         const lng = parseFloat(place.lng).toFixed(2);
                         
-                        // Text Part
                         const textSpan = document.createElement('span');
                         textSpan.textContent = `${place.name} (${lat}, ${lng})`;
                         div.appendChild(textSpan);
 
-                        // --- NEW: Icon Part ---
-                        // We create an image element to show the color
                         const iconImg = document.createElement('img');
                         const color = place.color || 'blue';
-                        // Using the 1x version of the icon for the dropdown (smaller)
                         iconImg.src = `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`;
                         iconImg.className = 'dropdown-icon';
                         div.appendChild(iconImg);
@@ -238,13 +337,19 @@
                             document.getElementById('lng').value = place.lng;
                             
                             suggestionsBox.style.display = 'none';
+                            
+                            const colorFilter = document.querySelector(`input[value="${color}"]`);
+                            if (colorFilter && !colorFilter.checked) {
+                                colorFilter.checked = true;
+                                activeFilters.add(color);
+                            }
+                            
                             searchPoints(); 
                         };
                         suggestionsBox.appendChild(div);
                     });
                 }
 
-                // B. EXTERNAL Results (Grey Text - No Icon)
                 if (externalData.length > 0) {
                     hasResults = true;
                     externalData.slice(0, 5).forEach(place => {
@@ -282,50 +387,6 @@
         }, 400);
     }
 
-    async function loadPoints(searchTerm = '') {
-      try {
-        let url = API_URL;
-        if (searchTerm) {
-            url += `?search=${encodeURIComponent(searchTerm)}`;
-        }
-
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        markersLayer.clearLayers();
-
-        if (searchTerm && data.length > 0) {
-            // Zoom to first result
-            const first = data[0];
-            map.flyTo([first.lat, first.lng], 10);
-        }
-
-        data.forEach(place => {
-            const markerColor = place.color || 'blue';
-            const popupContent = `
-                <div style="text-align:center">
-                    <b>${place.name}</b><br>
-                    <span style="font-size: 0.85em; color: #555;">
-                        (${place.lat.toFixed(4)}, ${place.lng.toFixed(4)})
-                    </span><br>
-                    <button class="delete-btn" onclick="deletePoint(${place.id})">Delete</button>
-                </div>
-            `;
-            L.marker([place.lat, place.lng], { icon: getIcon(markerColor) })
-              .addTo(markersLayer)
-              .bindPopup(popupContent);
-        });
-
-      } catch (err) {
-        console.error("Error fetching from Python:", err);
-      }
-    }
-
-    function searchPoints() {
-        const query = document.getElementById('searchInput').value;
-        loadPoints(query);
-    }
-
     window.addPoint = async function() {
       const name = document.getElementById('placeName').value;
       const lat = parseFloat(document.getElementById('lat').value);
@@ -341,6 +402,12 @@
       });
 
       if (response.ok) {
+          const colorFilter = document.querySelector(`input[value="${color}"]`);
+          if (colorFilter && !colorFilter.checked) {
+            colorFilter.checked = true;
+            activeFilters.add(color);
+          }
+          
           document.getElementById('searchInput').value = ''; 
           loadPoints(); 
       } else {
