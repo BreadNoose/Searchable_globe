@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Global Search</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; padding: 0; font-family: sans-serif; }
+    #map { height: 100vh; width: 100%; background-color: #aad3df; z-index: 1; }
+    
+    .controls {
+        position: absolute; top: 20px; right: 20px; z-index: 9999;
+        background: white; padding: 15px; border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        max-width: 250px;
+    }
+    input, select { display: block; margin-bottom: 10px; padding: 5px; width: 100%; box-sizing: border-box;}
+    
+    /* Buttons */
+    button { cursor: pointer; border-radius: 4px; font-weight: bold; border: none; padding: 8px 15px; width: 100%; margin-bottom: 5px; }
+    button.add-btn { background: #24b47e; color: white; }
+    button.add-btn:hover { background: #1f9b6c; }
+    
+    button.search-btn { background: #3388ff; color: white; }
+    button.search-btn:hover { background: #2266cc; }
+
+    button.delete-btn { background: #ff4d4d; color: white; font-size: 0.8em; margin-top: 8px; width: auto; }
+  </style>
+</head>
+<body>
+
+  <div class="controls">
+    <h3>Search Map</h3>
+    <input type="text" id="searchInput" placeholder="Search (e.g. Tower)" />
+    <button class="search-btn" onclick="searchPoints()">Search Locations</button>
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
+
+    <h3>Add Place</h3>
+    <input type="text" id="placeName" placeholder="Place Name" />
+    <input type="number" id="lat" placeholder="Latitude" step="any" />
+    <input type="number" id="lng" placeholder="Longitude" step="any" />
+    
+    <label style="font-size:0.9em; color:#666;">Marker Color:</label>
+    <select id="color">
+        <option value="blue">Blue</option>
+        <option value="red">Red</option>
+        <option value="green">Green</option>
+        <option value="orange">Orange</option>
+        <option value="violet">Purple</option>
+        <option value="black">Black</option>
+    </select>
+    
+    <button class="add-btn" onclick="addPoint()">Add Location</button>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    let map;
+    let markersLayer; // We need this to clear old pins!
+    const API_URL = 'http://127.0.0.1:8000/places';
+
+    function getIcon(color) {
+        return new L.Icon({
+            iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+    }
+
+    window.onload = async function() {
+        // Init Map
+        const mapBounds = [[-85, -Infinity], [85, Infinity]];
+        map = L.map('map', {
+            worldCopyJump: true, minZoom: 2, maxBounds: mapBounds, maxBoundsViscosity: 0.0 
+        }).setView([20, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        // Init Layer Group (Holds our pins)
+        markersLayer = L.layerGroup().addTo(map);
+
+        // Load initial data
+        await loadPoints();
+    };
+
+    // --- UPDATED: Load Points (Supports Search) ---
+    async function loadPoints(searchTerm = '') {
+      try {
+        // Construct URL: /places OR /places?search=Paris
+        let url = API_URL;
+        if (searchTerm) {
+            url += `?search=${encodeURIComponent(searchTerm)}`;
+        }
+
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        // 1. CLEAR old pins from the map
+        markersLayer.clearLayers();
+
+        // 2. Add NEW pins
+        data.forEach(place => {
+            const markerColor = place.color || 'blue';
+            const popupContent = `
+                <div style="text-align:center">
+                    <b>${place.name}</b><br>
+                    <span style="font-size: 0.85em; color: #555;">
+                        (${place.lat.toFixed(4)}, ${place.lng.toFixed(4)})
+                    </span><br>
+                    <button class="delete-btn" onclick="deletePoint(${place.id})">Delete</button>
+                </div>
+            `;
+            // Add to markersLayer, NOT directly to map
+            L.marker([place.lat, place.lng], { icon: getIcon(markerColor) })
+              .addTo(markersLayer)
+              .bindPopup(popupContent);
+        });
+
+      } catch (err) {
+        console.error("Error fetching from Python:", err);
+      }
+    }
+
+    // --- NEW: Search Trigger ---
+    function searchPoints() {
+        const query = document.getElementById('searchInput').value;
+        loadPoints(query);
+    }
+
+    // --- STANDARD FUNCTIONS (Add/Delete) ---
+    window.addPoint = async function() {
+      const name = document.getElementById('placeName').value;
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lng = parseFloat(document.getElementById('lng').value);
+      const color = document.getElementById('color').value;
+
+      if (!name || isNaN(lat) || isNaN(lng)) return alert("Please fill all fields");
+
+      const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, lat, lng, color })
+      });
+
+      if (response.ok) {
+          document.getElementById('searchInput').value = ''; // Clear search
+          loadPoints(); // Reload all
+      } else {
+          alert("Error saving location");
+      }
+    }
+
+    window.deletePoint = async function(id) {
+        if (!confirm("Are you sure you want to delete this location?")) return;
+        const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        if (response.ok) loadPoints();
+        else alert("Error deleting location");
+    }
+  </script>
+</body>
+</html>
