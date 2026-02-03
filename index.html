@@ -29,40 +29,40 @@
 
     input, select { display: block; margin-bottom: 10px; padding: 8px; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
     
-    /* --- NEW: Search Container with Icon --- */
-    .search-container { 
-        position: relative; 
-        margin-bottom: 0; 
-    }
+    .search-container { position: relative; margin-bottom: 0; }
+    #searchInput { padding-right: 35px; }
 
-    /* Padding-right ensures text doesn't hit the icon */
-    #searchInput {
-        padding-right: 35px; 
-    }
-
-    /* The Magnifying Glass Icon */
+    /* Magnifying Glass Icon */
     .search-icon {
-        position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-60%); /* Center vertically */
-        width: 18px;
-        height: 18px;
-        fill: #888;
-        pointer-events: none; /* Clicks pass through to the input */
+        position: absolute; right: 10px; top: 50%; transform: translateY(-60%);
+        width: 18px; height: 18px; fill: #888; pointer-events: none;
     }
 
     /* Suggestions Dropdown */
     .suggestions-list {
         position: absolute; top: 100%; left: 0; width: 100%;
         background: white; border: 1px solid #ccc; border-top: none;
-        max-height: 200px;
-        overflow-y: auto; z-index: 1001;
+        max-height: 200px; overflow-y: auto; z-index: 1001;
         display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
-    .suggestion-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 0.9em; }
+    /* --- UPDATED: Flexbox for Icon Alignment --- */
+    .suggestion-item { 
+        padding: 8px; 
+        cursor: pointer; 
+        border-bottom: 1px solid #eee; 
+        font-size: 0.9em;
+        display: flex;              /* NEW: Aligns items in a row */
+        justify-content: space-between; /* NEW: Pushes text left, icon right */
+        align-items: center;        /* NEW: Centers vertically */
+    }
     .suggestion-item:hover { background-color: #f0f0f0; }
+
+    /* --- NEW: Dropdown Marker Icon --- */
+    .dropdown-icon {
+        height: 20px; /* Small size for the list */
+        margin-left: 10px;
+    }
 
     /* Text Colors */
     .text-black { color: black; font-weight: bold; }
@@ -88,7 +88,7 @@
     
     <div class="panel">
         <div class="search-container">
-            <input type="text" id="searchInput" placeholder="Search Map (e.g. Tower)" autocomplete="off" />
+            <input type="text" id="searchInput" placeholder="Search (Name or Color)" autocomplete="off" />
             
             <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                 <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
@@ -192,9 +192,11 @@
 
         debounceTimer = setTimeout(async () => {
             try {
+                // 1. Search Internal (Name OR Color)
                 const internalPromise = fetch(`${API_URL}?search=${encodeURIComponent(query)}`)
                     .then(res => res.json());
 
+                // 2. Search External (Name only)
                 const externalPromise = fetch(`${EXTERNAL_API_URL}${encodeURIComponent(query)}`)
                     .then(res => res.json());
 
@@ -203,15 +205,31 @@
                 suggestionsBox.innerHTML = '';
                 let hasResults = false;
 
-                // A. INTERNAL Results (Black)
+                // A. INTERNAL Results (Black Text + Icon)
                 if (internalData.length > 0) {
                     hasResults = true;
-                    internalData.slice(0, 3).forEach(place => {
+                    // Show more results if searching by color, otherwise limit to 3
+                    const limit = 5; 
+                    internalData.slice(0, limit).forEach(place => {
                         const div = document.createElement('div');
                         div.className = 'suggestion-item text-black';
+                        
                         const lat = parseFloat(place.lat).toFixed(2);
                         const lng = parseFloat(place.lng).toFixed(2);
-                        div.textContent = `${place.name} (${lat}, ${lng})`;
+                        
+                        // Text Part
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = `${place.name} (${lat}, ${lng})`;
+                        div.appendChild(textSpan);
+
+                        // --- NEW: Icon Part ---
+                        // We create an image element to show the color
+                        const iconImg = document.createElement('img');
+                        const color = place.color || 'blue';
+                        // Using the 1x version of the icon for the dropdown (smaller)
+                        iconImg.src = `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`;
+                        iconImg.className = 'dropdown-icon';
+                        div.appendChild(iconImg);
                         
                         div.onclick = () => {
                             document.getElementById('searchInput').value = place.name;
@@ -226,7 +244,7 @@
                     });
                 }
 
-                // B. EXTERNAL Results (Grey)
+                // B. EXTERNAL Results (Grey Text - No Icon)
                 if (externalData.length > 0) {
                     hasResults = true;
                     externalData.slice(0, 5).forEach(place => {
@@ -236,7 +254,9 @@
                         const lat = parseFloat(place.lat).toFixed(2);
                         const lng = parseFloat(place.lon).toFixed(2);
                         
-                        div.textContent = `${place.display_name} (${lat}, ${lng})`;
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = `${place.display_name} (${lat}, ${lng})`;
+                        div.appendChild(textSpan);
                         
                         div.onclick = () => {
                             const exactLat = parseFloat(place.lat).toFixed(6);
@@ -275,6 +295,7 @@
         markersLayer.clearLayers();
 
         if (searchTerm && data.length > 0) {
+            // Zoom to first result
             const first = data[0];
             map.flyTo([first.lat, first.lng], 10);
         }
