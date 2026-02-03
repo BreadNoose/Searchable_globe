@@ -15,6 +15,40 @@
     }
     input, select { display: block; margin-bottom: 10px; padding: 5px; width: 100%; box-sizing: border-box;}
     
+    /* Search Box Container (needed for positioning the dropdown) */
+    .search-container {
+        position: relative; 
+        margin-bottom: 10px;
+    }
+
+    /* --- NEW: Suggestions Dropdown Styling --- */
+    .suggestions-list {
+        position: absolute;
+        top: 100%; /* Right below the input */
+        left: 0;
+        width: 100%;
+        background: white;
+        border: 1px solid #ccc;
+        border-top: none;
+        max-height: 150px;
+        overflow-y: auto;
+        z-index: 1001;
+        display: none; /* Hidden by default */
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .suggestion-item {
+        padding: 8px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+        font-size: 0.9em;
+    }
+    
+    .suggestion-item:hover {
+        background-color: #f0f0f0; /* Grey hover effect */
+    }
+
+    /* Buttons */
     button { cursor: pointer; border-radius: 4px; font-weight: bold; border: none; padding: 8px 15px; width: 100%; margin-bottom: 5px; }
     button.add-btn { background: #24b47e; color: white; }
     button.add-btn:hover { background: #1f9b6c; }
@@ -29,7 +63,12 @@
 
   <div class="controls">
     <h3>Search Map</h3>
-    <input type="text" id="searchInput" placeholder="Search (e.g. Tower)" />
+    
+    <div class="search-container">
+        <input type="text" id="searchInput" placeholder="Search (e.g. Tower)" autocomplete="off" />
+        <div id="suggestions" class="suggestions-list"></div>
+    </div>
+    
     <button class="search-btn" onclick="searchPoints()">Search Locations</button>
     <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
 
@@ -61,8 +100,9 @@
   <script>
     let map;
     let markersLayer;
-    
-    // --- UPDATED: Your specific Render URL ---
+    let debounceTimer; // Controls the typing delay
+
+    // YOUR RENDER URL
     const API_URL = 'https://searchable-globe.onrender.com/places'; 
 
     function getIcon(color) {
@@ -86,20 +126,73 @@
           attribution: '&copy; OpenStreetMap'
         }).addTo(map);
 
-        // --- NEW FEATURE: Click Map to Fill Inputs ---
         map.on('click', function(e) {
-            // e.latlng contains the coordinates of the click
-            const lat = e.latlng.lat.toFixed(6); // Limit to 6 decimals
-            const lng = e.latlng.lng.toFixed(6);
-
-            // Fill the input boxes
-            document.getElementById('lat').value = lat;
-            document.getElementById('lng').value = lng;
+            document.getElementById('lat').value = e.latlng.lat.toFixed(6);
+            document.getElementById('lng').value = e.latlng.lng.toFixed(6);
         });
 
         markersLayer = L.layerGroup().addTo(map);
         await loadPoints();
+
+        // --- NEW: Attach Typing Listener ---
+        document.getElementById('searchInput').addEventListener('input', handleTyping);
+        
+        // Hide suggestions if clicking elsewhere
+        document.addEventListener('click', function(e) {
+            if (e.target.id !== 'searchInput') {
+                document.getElementById('suggestions').style.display = 'none';
+            }
+        });
     };
+
+    // --- NEW: Typing Handler (Autofill Logic) ---
+    function handleTyping() {
+        const query = document.getElementById('searchInput').value;
+        const suggestionsBox = document.getElementById('suggestions');
+
+        // Clear existing timer (reset the clock if user keeps typing)
+        clearTimeout(debounceTimer);
+
+        if (query.length < 2) {
+            suggestionsBox.style.display = 'none';
+            return;
+        }
+
+        // Wait 300ms before asking server
+        debounceTimer = setTimeout(async () => {
+            try {
+                // Ask Python for matches
+                const url = `${API_URL}?search=${encodeURIComponent(query)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                // Clear old list
+                suggestionsBox.innerHTML = '';
+
+                if (data.length > 0) {
+                    suggestionsBox.style.display = 'block';
+                    // Limit to 5 suggestions to save space
+                    data.slice(0, 5).forEach(place => {
+                        const div = document.createElement('div');
+                        div.className = 'suggestion-item';
+                        div.textContent = place.name;
+                        
+                        // When user clicks a suggestion
+                        div.onclick = () => {
+                            document.getElementById('searchInput').value = place.name;
+                            suggestionsBox.style.display = 'none'; // Hide list
+                            searchPoints(); // Trigger the actual map search
+                        };
+                        suggestionsBox.appendChild(div);
+                    });
+                } else {
+                    suggestionsBox.style.display = 'none';
+                }
+            } catch (err) {
+                console.error("Autofill error:", err);
+            }
+        }, 300);
+    }
 
     async function loadPoints(searchTerm = '') {
       try {
@@ -112,6 +205,12 @@
         const data = await response.json();
         
         markersLayer.clearLayers();
+
+        // If we found specific results from a search, let's zoom to the first one!
+        if (searchTerm && data.length > 0) {
+            const first = data[0];
+            map.flyTo([first.lat, first.lng], 10); // Smooth animation
+        }
 
         data.forEach(place => {
             const markerColor = place.color || 'blue';
