@@ -10,7 +10,7 @@
     .controls {
         position: absolute; 
         top: 20px; 
-        left: 20px; /* --- CHANGED: Moved to Left --- */
+        left: 20px;
         z-index: 9999;
         background: white; padding: 15px; border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -24,12 +24,17 @@
     .suggestions-list {
         position: absolute; top: 100%; left: 0; width: 100%;
         background: white; border: 1px solid #ccc; border-top: none;
-        max-height: 150px; overflow-y: auto; z-index: 1001;
+        max-height: 200px; /* Made slightly taller */
+        overflow-y: auto; z-index: 1001;
         display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
     .suggestion-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 0.9em; }
     .suggestion-item:hover { background-color: #f0f0f0; }
+
+    /* --- NEW: Text Colors for Search --- */
+    .text-black { color: black; font-weight: bold; }
+    .text-grey { color: #888; font-style: italic; }
 
     /* Buttons */
     button { cursor: pointer; border-radius: 4px; font-weight: bold; border: none; padding: 8px 15px; width: 100%; margin-bottom: 5px; }
@@ -83,6 +88,8 @@
 
     // YOUR RENDER URL
     const API_URL = 'https://searchable-globe.onrender.com/places'; 
+    // NOMINATIM URL (External Search)
+    const EXTERNAL_API_URL = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=';
 
     function getIcon(color) {
         return new L.Icon({
@@ -98,16 +105,14 @@
     window.onload = async function() {
         const mapBounds = [[-85, -Infinity], [85, Infinity]];
         
-        // --- UPDATED MAP SETUP ---
         map = L.map('map', {
             worldCopyJump: true, 
             minZoom: 2, 
             maxBounds: mapBounds, 
             maxBoundsViscosity: 0.0,
-            zoomControl: false // Disable default zoom so we can move it
+            zoomControl: false 
         }).setView([20, 0], 2);
 
-        // Move Zoom controls to Top Right (so they don't block your menu)
         L.control.zoom({ position: 'topright' }).addTo(map);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -130,44 +135,90 @@
         });
     };
 
+    // --- UPDATED: SEARCH LOGIC ---
     function handleTyping() {
         const query = document.getElementById('searchInput').value;
         const suggestionsBox = document.getElementById('suggestions');
         clearTimeout(debounceTimer);
 
-        if (query.length < 2) {
+        if (query.length < 3) { // Wait for 3 chars to avoid spamming external API
             suggestionsBox.style.display = 'none';
             return;
         }
 
         debounceTimer = setTimeout(async () => {
             try {
-                const url = `${API_URL}?search=${encodeURIComponent(query)}`;
-                const response = await fetch(url);
-                const data = await response.json();
+                // 1. Request INTERNAL DB (Your Python Backend)
+                const internalPromise = fetch(`${API_URL}?search=${encodeURIComponent(query)}`)
+                    .then(res => res.json());
+
+                // 2. Request EXTERNAL DB (OpenStreetMap)
+                const externalPromise = fetch(`${EXTERNAL_API_URL}${encodeURIComponent(query)}`)
+                    .then(res => res.json());
+
+                // Wait for BOTH to finish
+                const [internalData, externalData] = await Promise.all([internalPromise, externalPromise]);
 
                 suggestionsBox.innerHTML = '';
+                let hasResults = false;
 
-                if (data.length > 0) {
-                    suggestionsBox.style.display = 'block';
-                    data.slice(0, 5).forEach(place => {
+                // A. Process INTERNAL Results (Black)
+                if (internalData.length > 0) {
+                    hasResults = true;
+                    internalData.slice(0, 3).forEach(place => {
                         const div = document.createElement('div');
-                        div.className = 'suggestion-item';
-                        div.textContent = place.name;
+                        div.className = 'suggestion-item text-black'; // Black Text
+                        div.textContent = place.name; // Display Name
+                        
                         div.onclick = () => {
+                            // On Click: Fill inputs & Search map
                             document.getElementById('searchInput').value = place.name;
+                            document.getElementById('placeName').value = place.name;
+                            document.getElementById('lat').value = place.lat;
+                            document.getElementById('lng').value = place.lng;
+                            
                             suggestionsBox.style.display = 'none';
-                            searchPoints();
+                            searchPoints(); // Filter map
                         };
                         suggestionsBox.appendChild(div);
                     });
-                } else {
-                    suggestionsBox.style.display = 'none';
                 }
+
+                // B. Process EXTERNAL Results (Grey)
+                if (externalData.length > 0) {
+                    hasResults = true;
+                    externalData.slice(0, 5).forEach(place => {
+                        const div = document.createElement('div');
+                        div.className = 'suggestion-item text-grey'; // Grey Text
+                        div.textContent = place.display_name; // External name is usually long
+                        
+                        div.onclick = () => {
+                            // On Click: Fill inputs ONLY (Do not filter map yet, it's not in DB)
+                            // Parse lat/lng from string to float
+                            const lat = parseFloat(place.lat).toFixed(6);
+                            const lng = parseFloat(place.lon).toFixed(6);
+                            
+                            // Auto-fill the "Add Place" form
+                            document.getElementById('searchInput').value = place.display_name.split(",")[0]; // Short name for search box
+                            document.getElementById('placeName').value = place.display_name.split(",")[0]; // Short name for Add box
+                            document.getElementById('lat').value = lat;
+                            document.getElementById('lng').value = lng;
+                            
+                            suggestionsBox.style.display = 'none';
+                            
+                            // Optional: Fly map to this new location so user can see it
+                            map.flyTo([lat, lng], 10);
+                        };
+                        suggestionsBox.appendChild(div);
+                    });
+                }
+
+                suggestionsBox.style.display = hasResults ? 'block' : 'none';
+
             } catch (err) {
                 console.error("Autofill error:", err);
             }
-        }, 300);
+        }, 400); // Slightly longer delay to be nice to the external API
     }
 
     async function loadPoints(searchTerm = '') {
