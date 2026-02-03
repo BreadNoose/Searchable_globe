@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Global Search</title>
+  <title>My Full-Stack Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { margin: 0; padding: 0; font-family: sans-serif; }
@@ -15,7 +15,6 @@
     }
     input, select { display: block; margin-bottom: 10px; padding: 5px; width: 100%; box-sizing: border-box;}
     
-    /* Buttons */
     button { cursor: pointer; border-radius: 4px; font-weight: bold; border: none; padding: 8px 15px; width: 100%; margin-bottom: 5px; }
     button.add-btn { background: #24b47e; color: white; }
     button.add-btn:hover { background: #1f9b6c; }
@@ -35,6 +34,9 @@
     <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
 
     <h3>Add Place</h3>
+    <div style="font-size: 0.8em; color: #666; margin-bottom: 5px; font-style: italic;">
+      (Click map to auto-fill)
+    </div>
     <input type="text" id="placeName" placeholder="Place Name" />
     <input type="number" id="lat" placeholder="Latitude" step="any" />
     <input type="number" id="lng" placeholder="Longitude" step="any" />
@@ -58,8 +60,10 @@
 
   <script>
     let map;
-    let markersLayer; // We need this to clear old pins!
-    const API_URL = 'https://searchable-globe.onrender.com/places';
+    let markersLayer;
+    
+    // --- UPDATED: Your specific Render URL ---
+    const API_URL = 'https://searchable-globe.onrender.com/places'; 
 
     function getIcon(color) {
         return new L.Icon({
@@ -73,7 +77,6 @@
     }
 
     window.onload = async function() {
-        // Init Map
         const mapBounds = [[-85, -Infinity], [85, Infinity]];
         map = L.map('map', {
             worldCopyJump: true, minZoom: 2, maxBounds: mapBounds, maxBoundsViscosity: 0.0 
@@ -83,17 +86,23 @@
           attribution: '&copy; OpenStreetMap'
         }).addTo(map);
 
-        // Init Layer Group (Holds our pins)
-        markersLayer = L.layerGroup().addTo(map);
+        // --- NEW FEATURE: Click Map to Fill Inputs ---
+        map.on('click', function(e) {
+            // e.latlng contains the coordinates of the click
+            const lat = e.latlng.lat.toFixed(6); // Limit to 6 decimals
+            const lng = e.latlng.lng.toFixed(6);
 
-        // Load initial data
+            // Fill the input boxes
+            document.getElementById('lat').value = lat;
+            document.getElementById('lng').value = lng;
+        });
+
+        markersLayer = L.layerGroup().addTo(map);
         await loadPoints();
     };
 
-    // --- UPDATED: Load Points (Supports Search) ---
     async function loadPoints(searchTerm = '') {
       try {
-        // Construct URL: /places OR /places?search=Paris
         let url = API_URL;
         if (searchTerm) {
             url += `?search=${encodeURIComponent(searchTerm)}`;
@@ -102,10 +111,8 @@
         const response = await fetch(url);
         const data = await response.json();
         
-        // 1. CLEAR old pins from the map
         markersLayer.clearLayers();
 
-        // 2. Add NEW pins
         data.forEach(place => {
             const markerColor = place.color || 'blue';
             const popupContent = `
@@ -117,7 +124,6 @@
                     <button class="delete-btn" onclick="deletePoint(${place.id})">Delete</button>
                 </div>
             `;
-            // Add to markersLayer, NOT directly to map
             L.marker([place.lat, place.lng], { icon: getIcon(markerColor) })
               .addTo(markersLayer)
               .bindPopup(popupContent);
@@ -128,13 +134,11 @@
       }
     }
 
-    // --- NEW: Search Trigger ---
     function searchPoints() {
         const query = document.getElementById('searchInput').value;
         loadPoints(query);
     }
 
-    // --- STANDARD FUNCTIONS (Add/Delete) ---
     window.addPoint = async function() {
       const name = document.getElementById('placeName').value;
       const lat = parseFloat(document.getElementById('lat').value);
@@ -150,8 +154,8 @@
       });
 
       if (response.ok) {
-          document.getElementById('searchInput').value = ''; // Clear search
-          loadPoints(); // Reload all
+          document.getElementById('searchInput').value = ''; 
+          loadPoints(); 
       } else {
           alert("Error saving location");
       }
