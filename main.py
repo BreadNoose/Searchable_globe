@@ -32,17 +32,14 @@ class Location(BaseModel):
     color: str
 
 # 4. API ROUTE: GET ALL PLACES
-# --- UPDATE THIS FUNCTION ---
 @app.get("/places")
 def get_places(search: str = ""):
-    # Start the query
     query = supabase.table("places_view").select("*")
     
-    # If the user typed something, filter by name
     if search:
-        query = query.ilike("name", f"%{search}%")
+        # This special syntax checks: Name contains Search OR Color contains Search
+        query = query.or_(f"name.ilike.%{search}%,color.ilike.%{search}%")
     
-    # Execute and return
     response = query.execute()
     return response.data
 
